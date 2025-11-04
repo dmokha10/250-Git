@@ -1,0 +1,74 @@
+---
+title: "Inference Etc."
+format: html
+embed-resources: true
+---
+
+```{r}
+#| label: setup
+#| message: false
+
+
+library(tidyverse)
+library(gt)
+library(readxl)
+
+Carseats <- ISLR2::Carseats
+```
+
+## Question 1
+
+```{r}
+mean(Carseats$Price,
+     na.rm = TRUE)
+```
+
+The mean in this sample is 115.795 which is higher than what the data provider told us (110) we can investigate this with a visualization and t-test.
+
+```{r}
+ggplot(Carseats, aes(x = Price)) +
+  geom_histogram() +
+  geom_vline(xintercept = 110)
+```
+The distribution is more to the right of 110 than to the left, indicating 110 may not be the mean. 
+
+We can figure this out using hypothesis testing:
+
+Null Hypothesis: mu = 43 ($\mu = 43$)
+Alt. Hypothesis: $H_a: \mu \ne 43$
+
+```{r}
+t.test(Carseats$Price,
+       mu = 110)
+```
+The p-value<0.05 so we reject the null hypothesis.
+
+In other words, the t-test tells us that there is strong evidence that the true mean is not equal to 110 as we were told. It suggests the sample mean is actually 115.795. 
+
+## Question 2
+
+```{r}
+t.test(Carseats$Price, conf.level = 0.90)
+```
+
+The 90% confidence interval is [113.8432, 117.7468].
+The sample mean is 115.795. 
+
+```{r}
+moe <- (117.7468 - 113.8432)/2
+moe
+```
+
+The MOE is 1.9518
+
+## Question 3
+
+```{r}
+
+t <- table(penguins$species, penguins$island)
+addmargins(t)
+
+```
+## Question 4
+
+
