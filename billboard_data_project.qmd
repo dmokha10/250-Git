@@ -1,0 +1,143 @@
+---
+title: "Billboard Data Project"
+author: "Diya Mokha"
+format: html
+---
+```{r}
+#| label: setup
+#| message: false
+
+
+library(tidyverse)
+library(gt)
+library(readxl)
+library(readr)
+
+billboard <- read_csv("billboard_data.csv") 
+```
+
+This analysis uses a data set on the Billboard #1 songs over the last 75 years to uncover how the happiness of songs relates to how long they stay at number 1 on the charts, and how this relationship has changed over the last 75 years. 
+
+The code below creates categories for how long each song stayed at #1 (short, moderate, and long durations) and then calculates the percentage of “happy” versus “not happy” songs within each group. "Happy" is being measured by wether each song's happiness is above or below the median happiness among all songs in this dataset. All missing values will be dropped as there is no way to replace them.
+```{r}
+billboard <- billboard %>% 
+  mutate(Number1_Duration = case_when((weeks_at_number_one >= 8) ~ "Long (8+ weeks)",
+                                      (weeks_at_number_one < 8) & (weeks_at_number_one >= 3) ~ "Moderate (3–7 weeks)",
+                                      (weeks_at_number_one < 3) & (weeks_at_number_one >= 1) ~ "Short (1–2 weeks)"))
+
+median_happy <- median(billboard$happiness, na.rm = TRUE)
+
+billboard_percentages <- billboard %>%
+  mutate(happy = happiness > median_happy) %>%
+  filter(!is.na(Number1_Duration), !is.na(happy)) %>%
+  group_by(Number1_Duration) %>%
+  summarise(percent_happy = round(100 * mean(happy == TRUE),2),
+            percent_not_happy = round(100 * mean(happy == FALSE),2),
+            .groups = "drop")
+
+```
+
+The table and plot below demonstrate how the share of happy versus not-happy songs varies depending on how long a song remains at #1. 
+```{r}
+billboard_percentages %>% 
+  gt() %>% 
+  cols_label(Number1_Duration = "Time at #1",
+             percent_happy = "Happy (%)",
+             percent_not_happy = "Not Happy (%)") %>% 
+  tab_header(title = "Share of Happy vs Not Happy Songs by Time Spent at #1 on the Charts")
+```
+
+
+
+
+```{r}
+#| figure-alt: A bar graph showing the percentage of happy vs not happy songs by time spent at number 1 on the charts
+
+
+# Using pivot longer to transform the table created above into a form that can be plotted 
+
+billboard_percentages_long <- billboard_percentages %>%
+  pivot_longer(cols = c(percent_happy, percent_not_happy),
+               names_to = "happy_or_not",
+               values_to = "percent") %>%
+  mutate(happy_or_not = recode(happy_or_not,
+                               percent_happy     = "Happy (≥ median)",
+                               percent_not_happy = "Not happy (< median)"))
+
+# Plotting the chart
+
+ggplot(billboard_percentages_long,
+       aes(x = Number1_Duration,
+           y = percent,
+           fill = happy_or_not)) +
+  geom_col(position = "dodge") +
+  scale_fill_brewer(palette = "Dark2") +
+  labs(title = "Percentage of Happy vs. Not-Happy Songs by Time Spent at #1 on the Charts",
+       x = "Weeks Spent at #1 on the Charts",
+       y = "Percentage of Songs",
+       fill = "Is the song happy?") +
+  theme_minimal()
+
+```
+Interestingly, the table and plot indicate that songs that stay at #1 for 8+ weeks are less likely to be happy than songs that stay at the top for shorter durations. Only 39.24& of these songs can be classified as "happy", while 60.76% are "not happy". For songs that spend a moderate or short time at #1, the split between "happy" and "not happy" songs is almost equal.
+
+The code below explores how this relationship between happiness and time spent at #1 has changed over the last 75 years.
+```{r}
+#| fig-alt: Figure showing how the average happiness of songs at number on on the charts each year has changed over time.
+
+
+# Creating a new data frame to measure the avg happiness of the songs at #1 in each year
+
+billboard_happy_over_time <- billboard %>%
+  filter(!is.na(happiness), !is.na(date)) %>%
+  mutate(year = lubridate::year(date)) %>%
+  group_by(year) %>%
+  summarise(avg_happiness = mean(happiness),
+            .groups = "drop")
+
+# Creating a new data frame to find the year with the least happy songs that were at #1
+
+lowest_year_info <- billboard_happy_over_time %>%
+  arrange(avg_happiness) %>%      
+  slice(1)                        
+
+lowest_year <- lowest_year_info$year
+
+# Looking at which songs topped the charts in the year wth lowest avg happiness for #1 songs:
+
+lowest_year_songs <- billboard %>%
+  mutate(year = lubridate::year(date)) %>%
+  filter(year == lowest_year) %>%
+  select(song, artist, date, happiness, weeks_at_number_one) %>%
+  arrange(happiness)
+
+
+# Plotting the average happiness of #1 songs overtime
+
+p <- ggplot(billboard_happy_over_time, aes(x = year, 
+                                      y = avg_happiness)) +
+  geom_line(color = "seagreen") +
+  geom_point(color = "seagreen") +
+  labs(title = "Average Happiness of #1 Songs Over Time",
+       x = "Year",
+       y = "Average Happiness") +
+  theme_minimal()
+
+# Creating an annotation for the year with the least happy #1 songs (1994) and pointing out the song that topped the charts for the longest
+p + annotate(geom = "text",
+             x = 1967,
+             y = 45,
+             label = "I'll Make Love to You, 
+             by Boyz II Men (14 weeks at #1, 
+             & happiness score of 20)") +
+  annotate(geom = "segment",
+           x = 1981,
+           y = 42.5,
+           xend = 1994,
+           yend = 37.77778,
+           arrow = arrow())
+
+```
+The plot above shows that in the 60s and 70s, songs that topped the charts typically had very high happiness levels, but in the 80s and 90s there was a major dip, less happy songs started to top the charts. The year with the lowest happiness level in #1 songs was 1994. After this, the average happiness increased again till the late 2000s, but then gradually started to decline until now. 
+
+By taking a closer look at the songs that topped the charts in 1994, the year with the saddest #1 songs, I found that "I'll Make Love to You", by Boyz II Men spent the longest time at #1 that year - 14 weeks, but it's happiness score was only 20. Compared to other songs in 1994 and overall, this song spent very long at #1, and had a significantly lower happiness score. This prompted further research about why this song was so popular at the time. Journalist Bianca Gracie from DiscoverMusic wrote that R&B ballads like this song dominated the early 90s music scene. She claims "I'll Make Love to You" was particularly successful because it had all the elements required to put female fans in a trance: lyrics that specifically targeted a woman’s desires, impassioned harmonies, and a music video starring actor Duane Martin. Boys II Men broke several records with this hit, including most weeks at #1 ^[Gracie, B. (2024, March 5). “I’ll Make Love To You”: The Story Behind Boyz II Men’s Romantic Hit. UDiscover Music. https://www.udiscovermusic.com/stories/boyz-ii-men-ill-make-love-to-you-history/] 
